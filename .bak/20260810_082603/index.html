@@ -68,6 +68,7 @@
       <option value="pane">분할패널(키움식)</option>
     </select></label>
 
+
     <label>측정 <select id="mode">
       <option value="v1">v1 · 고정 시간창 (원본)</option>
       <option value="v2">v2 · 돌파 앵커</option>
@@ -75,7 +76,7 @@
       <option value="v4" selected>v4 · 돌파 이벤트</option>
       <option value="both">v1 + v4 비교</option>
     </select></label>
-    <label id="thWrap">돌파 <input id="th" type="number" value="5" min="1" max="30" step="1" style="width:52px">%</label>
+
 
     <label><input type="checkbox" id="cLabel" checked> 개수 라벨</label>
     <button id="btnDraw" class="primary">그리기</button>
@@ -96,9 +97,11 @@
   <div id="panels"></div>
   <div id="events"></div>
 
-  
-  
+  <div id="panels"></div>
+  <div id="events"></div>
 </section>
+
+
 
 <script type="module" src="/app.js"></script>
 </body>

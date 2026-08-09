@@ -58,11 +58,3 @@ table.preview th, table.preview td { padding:4px 8px; border-bottom:1px solid #2
 
 
 
-
-/* 돌파 이벤트 표 */
-#events { margin-top: 14px; }
-#events h4 { margin: 0 0 6px; font-size: 13px; color: #c9d1d9; }
-#events table { width: 100%; border-collapse: collapse; font-size: 12px; }
-#events th, #events td { padding: 4px 8px; border-bottom: 1px solid #21262d; text-align: left; }
-#events th { color: #8b949e; font-weight: 500; }
-tr.out { opacity: .45; }

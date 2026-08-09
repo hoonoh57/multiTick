@@ -109,10 +109,8 @@ async function doSave() {
     body: JSON.stringify(state.watchlist),
   });
   const j = await r.json();
-  if (!r.ok) { msg('저장 실패: ' + (j.detail ?? '')); return; }
-  const file = j.saved ? String(j.saved).split(/[\\/]/).pop() : '';   // 서버 응답 키: saved
-  msg(`저장됨: ${file} (${j.count ?? 0}종목)`);
-  loadWatchlists(file);
+  msg(r.ok ? `저장됨: ${j.name || j.file}` : '저장 실패');
+  loadWatchlists();
 }
 
 function renderPreview(wl, unresolved, ambiguous) {
@@ -132,52 +130,30 @@ function renderPreview(wl, unresolved, ambiguous) {
 function initChartTab() {
   $('#btnDraw').addEventListener('click', () => draw().catch(e => cmsg('오류: ' + e.message)));
   $('#btnGolden').addEventListener('click', saveGolden);
-  $('#wlPick').addEventListener('change', e => {
-    if (e.target.value) loadOne(e.target.value);
+  $('#wlPick').addEventListener('change', async e => {
+    if (!e.target.value) return;
+    const r = await fetch('/api/watchlist/' + encodeURIComponent(e.target.value));
+    applyWatchlist(await r.json());
   });
 
   const modeSel = $('#mode');
   const syncMode = () => {
-    if($('#thWrap')) $('#thWrap').style.display = modeSel.value === 'v1' ? 'none' : '';
-    if($('#frozenBadge')) $('#frozenBadge').innerHTML =
+    $('#thWrap').style.display = modeSel.value === 'v1' ? 'none' : '';
+    $('#frozenBadge').innerHTML =
       modeSel.value === 'v1' ? '<span class="badge-frozen">FROZEN v1.0.0</span>' : '';
   };
   modeSel.addEventListener('change', syncMode);
   syncMode();
 }
 
-async function loadWatchlists(prefer) {
-  const sel = $('#wlPick');
-  sel.innerHTML = '<option value="">— 불러오는 중… —</option>';
+async function loadWatchlists() {
   try {
     const r = await fetch('/api/watchlists');
-    if (!r.ok) throw new Error(`/api/watchlists ${r.status}`);
-    const names = await r.json();               // 서버: 파일명 문자열 배열 (오름차순)
-
-    if (!names.length) {
-      sel.innerHTML = '<option value="">— 저장된 목록 없음 —</option>';
-      cmsg('저장된 목록이 없습니다. [성과검증 불러오기] 탭에서 변환 → 파일로 저장을 한 번만 해두세요.');
-      return;
-    }
-
-    const arr = [...names].sort((a, b) => String(b).localeCompare(String(a)));  // 역순 = 최신순
-    sel.innerHTML = arr.map(n => `<option value="${n}">${n}</option>`).join('');
-
-    const pick = (prefer && arr.includes(prefer)) ? prefer : arr[0];
-    sel.value = pick;
-    await loadOne(pick);                        // 플레이스홀더 없이 즉시 로드
-  } catch (e) {
-    sel.innerHTML = '<option value="">— 불러오기 실패 —</option>';
-    cmsg('목록 조회 오류: ' + e.message);
-  }
-}
-
-async function loadOne(name) {
-  try {
-    const r = await fetch('/api/watchlist/' + encodeURIComponent(name));  // 확장자 포함 그대로
-    if (!r.ok) throw new Error(`목록 읽기 실패 ${r.status}`);
-    applyWatchlist(await r.json());
-  } catch (e) { cmsg('오류: ' + e.message); }
+    const list = await r.json();
+    const names = Array.isArray(list) ? list : (list.items || []);
+    $('#wlPick').innerHTML = '<option value="">— 저장된 목록 —</option>'
+      + names.map(n => `<option>${n.name ?? n}</option>`).join('');
+  } catch { /* 서버 미기동 시 무시 */ }
 }
 
 function applyWatchlist(wl) {
@@ -305,7 +281,8 @@ async function draw() {
   cmsg('조회 중…');
   const ctx = await buildCtx();
   const mode = $('#mode').value;
-  const opt = { threshold: +$('#th').value || 5, preMin: 3, baseMin: 10, judgeMin: 10 };
+  const th = +$('#th').value || 5;
+  const opt = { threshold: th, preMin: 3, baseMin: 10, judgeMin: 10 };
 
   const results = mode === 'both'
     ? [run('v1', ctx), run('v4', ctx, opt)]
@@ -479,7 +456,7 @@ function renderPanels(ctx, results) {
   results.forEach((res, ri) => {
     const el = document.createElement('div');
     el.className = 'panel';
-    const cmp  = results.length === 2 ? ranks[1 - ri] : null;
+    const cmp = results.length === 2 ? ranks[1 - ri] : null;
     const mine = ranks[ri];
     const head = res.columns.map(c => `<th>${c.label}</th>`).join('');
     const reason = new Map(res.ranking.map(x => [x.code, x.reason || '']));
@@ -491,7 +468,7 @@ function renderPanels(ctx, results) {
         const m = res.perSymbol[s.code]?.metrics || {};
         const n = mine.get(s.code) ?? null;
         const cells = res.columns
-          .map(c => `<td>${(FMT[c.fmt] || FMT.raw)(m[c.key])}</td>`).join('');
+          .map(c => `<td>${(FMT[c.fmt] || FMT.raw || String)(m[c.key])}</td>`).join('');
         let mv = '';
         if (cmp) {
           const o = cmp.get(s.code);
