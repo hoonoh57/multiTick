@@ -1,0 +1,15 @@
+﻿node_modules/
+data/
+!data/golden/
+venv/
+dist/
+.vite/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store
+
+.token-cache.json
+*.token-cache.json
