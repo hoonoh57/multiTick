@@ -13,3 +13,5 @@ npm-debug.log*
 
 .token-cache.json
 *.token-cache.json
+
+.bak/

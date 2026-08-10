@@ -4,7 +4,9 @@ import * as v2 from './v2_breakout.js';
 import * as v3 from './v3_gateDensity.js';
 import * as v4 from './v4_events.js'; 
 
-export const MODES = { v1, v2, v3, v4 };
+import * as v5 from './v5_ladder.js';
+
+export const MODES = { v1, v2, v3, v4, v5 };
 export const list = () => Object.values(MODES).map(m => m.meta);
 export const run = (id, ctx, opt) => MODES[id].compute(ctx, opt);
 

@@ -132,17 +132,23 @@ function renderPreview(wl, unresolved, ambiguous) {
 function initChartTab() {
   $('#btnDraw').addEventListener('click', () => draw().catch(e => cmsg('오류: ' + e.message)));
   $('#btnGolden').addEventListener('click', saveGolden);
-  $('#wlPick').addEventListener('change', e => {
-    if (e.target.value) loadOne(e.target.value);
-  });
+  $('#wlPick').addEventListener('change', e => { if (e.target.value) loadOne(e.target.value); });
 
   const modeSel = $('#mode');
   const syncMode = () => {
-    if($('#thWrap')) $('#thWrap').style.display = modeSel.value === 'v1' ? 'none' : '';
-    if($('#frozenBadge')) $('#frozenBadge').innerHTML =
-      modeSel.value === 'v1' ? '<span class="badge-frozen">FROZEN v1.0.0</span>' : '';
+    const m = modeSel.value;
+    if ($('#thWrap')) $('#thWrap').style.display = m === 'v1' ? 'none' : '';
+    if ($('#ladBox')) $('#ladBox').style.display = (m === 'v5' || m === 'v45') ? '' : 'none';
+    if ($('#frozenBadge')) $('#frozenBadge').innerHTML =
+      m === 'v1' ? '<span class="badge-frozen">FROZEN v1.0.0</span>' : '';
   };
   modeSel.addEventListener('change', syncMode);
+
+  const lad = $('#ladMode');
+  if (lad) lad.addEventListener('change', () => {
+    $('#ladRungs').value = lad.value === 'rel' ? '-3,-2,-1,0,1,2,3' : '2,3,4,5,6,7,8,10';
+  });
+
   syncMode();
 }
 
@@ -305,19 +311,31 @@ async function draw() {
   cmsg('조회 중…');
   const ctx = await buildCtx();
   const mode = $('#mode').value;
-  const opt = { threshold: +$('#th').value || 5, preMin: 3, baseMin: 10, judgeMin: 10 };
 
-  const results = mode === 'both'
-    ? [run('v1', ctx), run('v4', ctx, opt)]
-    : [run(mode, ctx, opt)];
+  const val = (sel, dft) => ($(sel) ? $(sel).value : dft);
+  const rungs = (val('#ladRungs', '') || '')
+    .split(',').map(v => parseFloat(v.trim())).filter(Number.isFinite);
+
+  const opt = {
+    threshold: +$('#th').value || 5,
+    preMin: 3, baseMin: 10, judgeMin: 10,
+    ladderMode: val('#ladMode', 'abs'),
+    rungs: rungs.length ? rungs : null,
+    denMode: val('#denMode', 'tick'),
+    touch: val('#touchMode', 'high'),
+  };
+
+  const ids = mode === 'both' ? ['v1', 'v4']
+            : mode === 'v45'  ? ['v5', 'v4']
+            : [mode];
+  const results = ids.map(id => run(id, ctx, id === 'v1' ? undefined : opt));
 
   render(ctx, results[0]);
   renderPanels(ctx, results);
-  renderEvents(results.find(r => r.id === 'v4'));
+  renderEvents(results);
 
-  $('#corr').textContent = results.length === 2
-    ? `순위 상관 ρ = ${spearman(results[0], results[1])?.toFixed(3) ?? '-'}`
-    : '';
+  const rho = results.length === 2 ? spearman(results[0], results[1]) : null;
+  $('#corr').textContent = rho == null ? '' : `순위 상관 ρ = ${rho.toFixed(3)}`;
 
   state.lastRun = { ctx: stripCandles(ctx), results };
 
@@ -536,26 +554,73 @@ function renderEvents(res) {
   const box = document.querySelector('#events');
   if (!box) return;
   box.innerHTML = '';
-  if (!res?.events?.length) { box.textContent = '해당 시간대에 돌파 이벤트가 없습니다.'; return; }
-  const C = { 진성: '#2ecc71', 먹튀: '#e05a5a', 중립: '#8b949e', 미판정: '#6e7681' };
+  const arr = (Array.isArray(res) ? res : [res]).filter(r => r && Array.isArray(r.events));
+  for (const r of arr) {
+    const d = document.createElement('div');
+    d.className = 'evblock';
+    d.innerHTML = r.id === 'v5' ? ladderHtml(r) : eventsHtml(r);
+    box.appendChild(d);
+  }
+}
+
+const EVC = { '진성': '#2ecc71', '먹튀': '#e05a5a', '중립': '#8b949e', '미판정': '#6e7681' };
+const nz2 = v => (v == null ? '-' : v.toFixed(2));
+const nz1 = v => (v == null ? '-' : v.toFixed(1));
+const evName = e => `<span class="swatch" style="background:${e.color}"></span>${e.name}` +
+                    (e.seq > 1 ? ` <small>#${e.seq}</small>` : '');
+const sumLine = (t, sm) => `<div class="evsum">${t} — ` + ((sm || []).filter(b => b.n).map(b =>
+  `${b.bin} → ${b.win}/${b.n} (${(b.rate * 100).toFixed(0)}%)`).join(' · ') || '표본 없음') + '</div>';
+
+function eventsHtml(res) {
+  if (!res.events.length) return '<h4>v4 · 돌파 이벤트</h4><div class="dim">해당 시간대에 돌파 이벤트가 없습니다.</div>';
   const row = e => `<tr>
-    <td>${hhmm(e.gateAt)}</td>
-    <td><span class="swatch" style="background:${e.color}"></span>${e.name}${e.seq > 1 ? ` <small>#${e.seq}</small>` : ''}</td>
-    <td style="color:${C[e.label]};font-weight:600">${e.label}</td>
-    <td>${e.preX != null ? '×' + e.preX.toFixed(2) : (e.thinBase ? '표본부족' : '-')}</td>
-    <td>${e.baseDen != null ? e.baseDen.toFixed(1) : '-'}</td>
-    <td>${e.preDen.toFixed(1)}</td>
-    <td>${(e.upShare * 100).toFixed(0)}%</td>
-    <td>${e.effi.toFixed(2)}</td>
-    <td style="color:#2ecc71">+${e.mfe.toFixed(2)}%</td>
-    <td style="color:#e05a5a">${e.mae.toFixed(2)}%</td>
-    <td>${e.holdMin.toFixed(1)}</td></tr>`;
-  const sum = res.summary.filter(b => b.n).map(b =>
-    `${b.bin} → ${b.win}/${b.n} (${(b.rate * 100).toFixed(0)}%)`).join(' · ');
-  box.innerHTML = `<h4>돌파 이벤트 ${res.events.length}건</h4>
+    <td>${hhmm(e.gateAt)}</td><td>${evName(e)}</td>
+    <td style="color:${EVC[e.label]};font-weight:600">${e.label}</td>
+    <td>${e.preX != null ? '×' + nz2(e.preX) : (e.thinBase ? '표본부족' : '-')}</td>
+    <td>${nz1(e.baseDen)}</td><td>${nz1(e.preDen)}</td>
+    <td>${(e.upShare * 100).toFixed(0)}%</td><td>${nz2(e.effi)}</td>
+    <td style="color:#2ecc71">+${nz2(e.mfe)}%</td>
+    <td style="color:#e05a5a">${nz2(e.mae)}%</td>
+    <td>${nz1(e.holdMin)}</td></tr>`;
+  return `<h4>v4 · 돌파 이벤트 ${res.events.length}건</h4>
     <table class="preview"><thead><tr>
     <th>돌파</th><th>종목</th><th>판정</th><th>급증배수</th><th>기준/분</th><th>직전/분</th>
     <th>양봉비</th><th>%p/봉</th><th>MFE</th><th>MAE</th><th>유지</th></tr></thead>
     <tbody>${res.events.map(row).join('')}</tbody></table>
-    <div style="margin-top:6px;color:#8b949e;font-size:12px">급증배수별 진성률 — ${sum || '표본 없음'}</div>`;
+    ${sumLine('급증배수별 진성률', res.summary)}`;
+}
+
+function ladderHtml(res) {
+  if (!res.events.length)
+    return `<h4>v5 · 사다리 <small>눈금 ${res.rungsLabel}</small></h4>
+            <div class="dim">해당 시간대에 돌파 이벤트가 없습니다.</div>`;
+  const cls = i => (i === 0 ? 'sg-base' : (i <= res.gateIndex ? 'sg-pre' : 'sg-post'));
+  const row = e => `<tr>
+    <td>${hhmm(e.gateAt)}</td><td>${evName(e)}</td>
+    <td style="color:${EVC[e.label]};font-weight:600">${e.label}</td>
+    <td>${e.baseX != null ? '×' + nz2(e.baseX) : '-'}</td>
+    <td>${e.accel != null ? '×' + nz2(e.accel) : '-'}</td>
+    <td>${nz2(e.baseDen)}</td><td>${nz2(e.preDen)}</td>
+    <td>${nz1(e.preSpp)}</td><td>${(e.upShare * 100).toFixed(0)}%</td>
+    <td>${nz1(e.climbSec / 60)}</td>
+    <td>${e.maxRung != null ? e.maxRung + '%' : '-'}</td>
+    <td style="color:#2ecc71">+${nz2(e.mfe)}</td>
+    <td style="color:#e05a5a">${nz2(e.mae)}</td>
+    <td>${e.broken ? '●' : ''}</td></tr>`;
+  const segRow = e => `<tr><td>${evName(e)}</td>
+    <td style="color:${EVC[e.label]}">${e.label}</td>` +
+    e.segs.map((g, i) => `<td class="${cls(i)}">${g.den == null ? '-'
+      : nz2(g.den) + (g.spp != null ? `<small> ${nz1(g.spp)}s</small>` : '')}</td>`).join('') + '</tr>';
+  return `<h4>v5 · 사다리 이벤트 ${res.events.length}건
+      <small>눈금 ${res.rungsLabel} · 밀도 ${res.denUnit}</small></h4>
+    <table class="preview"><thead><tr>
+      <th>돌파</th><th>종목</th><th>판정</th><th>급증배수</th><th>가속</th><th>기준밀도</th><th>직전밀도</th>
+      <th>초/%p</th><th>양봉비</th><th>등반(분)</th><th>최고눈금</th><th>MFE</th><th>MAE</th><th>끊김</th>
+    </tr></thead><tbody>${res.events.map(row).join('')}</tbody></table>
+    <h4 class="sub">구간별 밀도 (${res.denUnit} · 작은글씨=초/%p)</h4>
+    <table class="preview"><thead><tr><th>종목</th><th>판정</th>` +
+      res.segLabels.map((l, i) => `<th class="${cls(i)}">${l}</th>`).join('') +
+    `</tr></thead><tbody>${res.events.map(segRow).join('')}</tbody></table>
+    ${sumLine('급증배수(직전/기준)별 진성률', res.summary)}
+    ${sumLine('가속(직전/첫구간)별 진성률', res.summary2)}`;
 }

@@ -66,3 +66,16 @@ table.preview th, table.preview td { padding:4px 8px; border-bottom:1px solid #2
 #events th, #events td { padding: 4px 8px; border-bottom: 1px solid #21262d; text-align: left; }
 #events th { color: #8b949e; font-weight: 500; }
 tr.out { opacity: .45; }
+
+/* v5 사다리 / 이벤트 블록 */
+#events .evblock { margin-top: 14px; }
+#events .evsum { margin-top: 6px; color: #8b949e; font-size: 12px; }
+#events .dim { color: #8b949e; font-size: 12px; }
+#events h4.sub { margin: 12px 0 6px; }
+#events small { color: #6e7681; font-weight: 400; }
+#events td.sg-base { background: rgba(48,54,61,.35); }
+#events td.sg-pre  { background: rgba(245,176,65,.12); }
+#events td.sg-post { background: rgba(46,204,113,.10); }
+#events th.sg-pre  { color: #f5b041; }
+#events th.sg-post { color: #2ecc71; }
+#ladBox label { margin-left: 6px; }
